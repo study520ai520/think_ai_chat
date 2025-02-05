@@ -1,6 +1,18 @@
 import requests
 import json
+import logging
 from config import API_CONFIG, SYSTEM_PROMPT, DEFAULT_API_KEY
+
+# 配置日志
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log', encoding='utf-8')
+    ]
+)
+logger = logging.getLogger(__name__)
 
 class AIModel:
     def __init__(self):
@@ -9,11 +21,13 @@ class AIModel:
         self.config = API_CONFIG.copy()
         self.config["api_key"] = self.api_key
         self.system_prompt = SYSTEM_PROMPT
+        logger.info("AIModel initialized with base_url: %s", self.base_url)
 
     def update_api_key(self, new_api_key):
         """更新API Key"""
         self.api_key = new_api_key
         self.config["api_key"] = new_api_key
+        logger.info("API Key updated")
 
     def generate_response(self, user_input, chat_history=None):
         if chat_history is None:
@@ -67,6 +81,7 @@ class AIModel:
         
         # 检查API Key
         if not self.api_key:
+            logger.error("API Key not set")
             yield {
                 "type": "error",
                 "content": {
@@ -78,6 +93,7 @@ class AIModel:
         
         # 构建消息历史
         messages = self._build_messages(chat_history, user_input)
+        logger.debug("Built messages: %s", json.dumps(messages, ensure_ascii=False))
         
         # 调用API
         headers = {
@@ -95,8 +111,10 @@ class AIModel:
             "presence_penalty": self.config["presence_penalty"],
             "stream": True  # 启用流式输出
         }
+        logger.debug("API request data: %s", json.dumps(data, ensure_ascii=False))
         
         try:
+            logger.info("Making API request to %s", self.base_url)
             response = requests.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
@@ -104,6 +122,7 @@ class AIModel:
                 stream=True
             )
             response.raise_for_status()
+            logger.info("API request successful")
             
             # 用于累积思考过程和最终回答
             reasoning_content = ""
@@ -116,21 +135,27 @@ class AIModel:
                 try:
                     # 移除 "data: " 前缀并解析JSON
                     line = line.decode('utf-8')
+                    logger.debug("Received line: %s", line)
+                    
                     if line.startswith("data: "):
                         line = line[6:]
                     if line == "[DONE]":
+                        logger.info("Stream completed")
                         break
                         
                     chunk = json.loads(line)
                     if "choices" not in chunk:
+                        logger.warning("No choices in chunk: %s", line)
                         continue
                         
                     delta = chunk["choices"][0].get("delta", {})
+                    logger.debug("Delta content: %s", json.dumps(delta, ensure_ascii=False))
                     
                     # 检查是否有reasoning_content
                     reasoning_chunk = delta.get("reasoning_content", "")
                     if reasoning_chunk:
                         reasoning_content += reasoning_chunk
+                        logger.debug("Added reasoning chunk: %s", reasoning_chunk)
                         yield {
                             "type": "reasoning",
                             "content": reasoning_chunk
@@ -140,20 +165,22 @@ class AIModel:
                     content_chunk = delta.get("content", "")
                     if content_chunk:
                         final_content += content_chunk
+                        logger.debug("Added content chunk: %s", content_chunk)
                         yield {
                             "type": "response",
                             "content": content_chunk
                         }
                         
-                except json.JSONDecodeError:
-                    print(f"JSON解析错误: {line}")
+                except json.JSONDecodeError as e:
+                    logger.error("JSON解析错误: %s, 数据: %s", str(e), line)
                     continue
                 except Exception as e:
-                    print(f"处理数据块时出错: {str(e)}, 数据: {line}")
+                    logger.error("处理数据块时出错: %s, 数据: %s", str(e), line, exc_info=True)
                     continue
             
             # 返回完整的响应
             if reasoning_content or final_content:
+                logger.info("Generation completed successfully")
                 yield {
                     "type": "complete",
                     "content": {
@@ -162,11 +189,22 @@ class AIModel:
                     }
                 }
             else:
+                logger.error("No valid content generated")
                 raise Exception("未能获取有效的响应内容")
             
+        except requests.exceptions.RequestException as e:
+            error_msg = f"API请求错误：{str(e)}"
+            logger.error(error_msg, exc_info=True)
+            yield {
+                "type": "error",
+                "content": {
+                    "reasoning": error_msg,
+                    "response": f"抱歉，API请求失败：{str(e)}"
+                }
+            }
         except Exception as e:
             error_msg = f"API调用出错：{str(e)}"
-            print(error_msg)  # 打印错误信息以便调试
+            logger.error(error_msg, exc_info=True)
             yield {
                 "type": "error",
                 "content": {
