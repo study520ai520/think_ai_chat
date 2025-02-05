@@ -61,7 +61,17 @@ with st.sidebar:
 # 显示聊天历史
 for message in st.session_state.chat_history:
     with st.chat_message(message["role"]):
-        st.write(message["content"])
+        # 如果是AI回复，显示思考过程和回答
+        if message["role"] == "assistant" and isinstance(message["content"], dict):
+            # 创建一个可折叠的区域显示思考过程
+            with st.expander("查看思考过程", expanded=False):
+                st.markdown("### 🤔 思考过程")
+                st.markdown(message["content"]["reasoning"])
+            # 显示最终回答
+            st.markdown("### 💡 回答")
+            st.markdown(message["content"]["response"])
+        else:
+            st.write(message["content"])
 
 # 用户输入
 if prompt := st.chat_input("请输入您的问题..."):
@@ -79,7 +89,15 @@ if prompt := st.chat_input("请输入您的问题..."):
                 prompt, 
                 st.session_state.chat_history[:-1]
             )
-            st.write(response)
+            
+            # 创建一个可折叠的区域显示思考过程
+            with st.expander("查看思考过程", expanded=False):
+                st.markdown("### 🤔 思考过程")
+                st.markdown(response["reasoning"])
+            
+            # 显示最终回答
+            st.markdown("### 💡 回答")
+            st.markdown(response["response"])
             
             # 添加AI回复到历史
             st.session_state.chat_history.append({"role": "assistant", "content": response}) 

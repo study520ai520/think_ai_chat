@@ -19,7 +19,7 @@ API_CONFIG = {
     # 默认配置
     "model": "deepseek-chat",
     "temperature": 0.7,
-    "max_tokens": 2000,
+    "max_tokens": 8192,
     "top_p": 0.95,
     "frequency_penalty": 0,
     "presence_penalty": 0

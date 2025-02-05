@@ -38,9 +38,21 @@ class AIModel:
                 json=data
             )
             response.raise_for_status()
-            return response.json()["choices"][0]["message"]["content"]
+            response_data = response.json()
+            
+            # 获取思考过程和最终回答
+            reasoning_content = response_data["choices"][0]["message"].get("reasoning_content", "")
+            final_content = response_data["choices"][0]["message"]["content"]
+            
+            return {
+                "reasoning": reasoning_content,
+                "response": final_content
+            }
         except Exception as e:
-            return f"抱歉，发生了错误：{str(e)}"
+            return {
+                "reasoning": f"思考过程出错：{str(e)}",
+                "response": f"抱歉，发生了错误：{str(e)}"
+            }
 
     def _build_messages(self, chat_history, user_input):
         messages = [{"role": "system", "content": self.system_prompt}]
