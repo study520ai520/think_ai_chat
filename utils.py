@@ -1,6 +1,7 @@
 import requests
 import json
 import logging
+import time
 from config import API_CONFIG, SYSTEM_PROMPT, DEFAULT_API_KEY
 
 # 配置日志
@@ -18,6 +19,10 @@ logger = logging.getLogger(__name__)
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
+class APIError(Exception):
+    """API调用相关错误"""
+    pass
+
 class AIModel:
     def __init__(self):
         self.api_key = DEFAULT_API_KEY
@@ -25,6 +30,8 @@ class AIModel:
         self.config = API_CONFIG.copy()
         self.config["api_key"] = self.api_key
         self.system_prompt = SYSTEM_PROMPT
+        self.max_retries = 3  # 最大重试次数
+        self.retry_delay = 2  # 重试间隔（秒）
         logger.info("初始化AI模型，使用API地址: %s", self.base_url)
 
     def update_api_key(self, new_api_key):
@@ -32,6 +39,25 @@ class AIModel:
         self.api_key = new_api_key
         self.config["api_key"] = new_api_key
         logger.info("API Key已更新")
+
+    def _make_api_request(self, url, headers, data, stream=False):
+        """发送API请求，带重试机制"""
+        for attempt in range(self.max_retries):
+            try:
+                response = requests.post(
+                    url,
+                    headers=headers,
+                    json=data,
+                    stream=stream
+                )
+                response.raise_for_status()
+                return response
+            except requests.exceptions.RequestException as e:
+                if attempt == self.max_retries - 1:  # 最后一次重试
+                    raise APIError(f"API请求失败（已重试{self.max_retries}次）：{str(e)}")
+                logger.warning("API请求失败，%d秒后重试（%d/%d）: %s", 
+                             self.retry_delay, attempt + 1, self.max_retries, str(e))
+                time.sleep(self.retry_delay)
 
     def generate_response(self, user_input, chat_history=None):
         if chat_history is None:
@@ -118,19 +144,20 @@ class AIModel:
         
         try:
             logger.info("正在调用API生成回答...")
-            response = requests.post(
+            response = self._make_api_request(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
-                json=data,
+                data=data,
                 stream=True
             )
-            response.raise_for_status()
             logger.info("API连接成功，开始接收数据流")
             
             # 用于累积思考过程和最终回答
             reasoning_content = ""
             final_content = ""
             chunk_count = 0
+            last_error_time = 0  # 上次错误时间
+            error_count = 0  # 连续错误计数
             
             for line in response.iter_lines():
                 if not line:
@@ -156,8 +183,22 @@ class AIModel:
                         
                     try:
                         chunk = json.loads(line)
+                        error_count = 0  # 重置错误计数
                     except json.JSONDecodeError as e:
-                        logger.error("JSON解析错误: %s, 原始数据: %r", str(e), line)
+                        current_time = time.time()
+                        if current_time - last_error_time > self.retry_delay:
+                            error_count = 1
+                        else:
+                            error_count += 1
+                            
+                        last_error_time = current_time
+                        
+                        if error_count >= self.max_retries:
+                            logger.error("连续JSON解析错误达到最大重试次数")
+                            raise APIError("数据解析失败，请稍后重试")
+                            
+                        logger.warning("JSON解析错误（%d/%d）: %s, 原始数据: %r", 
+                                     error_count, self.max_retries, str(e), line)
                         continue
                         
                     if "choices" not in chunk:
@@ -206,16 +247,16 @@ class AIModel:
                 }
             else:
                 logger.error("未生成有效内容")
-                raise Exception("未能获取有效的响应内容")
+                raise APIError("未能获取有效的响应内容")
             
-        except requests.exceptions.RequestException as e:
-            error_msg = f"API请求错误：{str(e)}"
-            logger.error(error_msg, exc_info=True)
+        except APIError as e:
+            error_msg = str(e)
+            logger.error(error_msg)
             yield {
                 "type": "error",
                 "content": {
                     "reasoning": error_msg,
-                    "response": f"抱歉，API请求失败：{str(e)}"
+                    "response": f"抱歉，{error_msg}"
                 }
             }
         except Exception as e:
