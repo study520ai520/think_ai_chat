@@ -15,6 +15,9 @@ if "api_key" not in st.session_state:
 if "ai_model" not in st.session_state:
     st.session_state.ai_model = AIModel()
 
+if "current_request" not in st.session_state:
+    st.session_state.current_request = None
+
 # 页面标题
 st.title("🤖 AI思考推理助手")
 
@@ -72,7 +75,73 @@ with st.sidebar:
     # 清空对话按钮
     if st.button("清空对话历史", type="secondary"):
         st.session_state.chat_history = []
+        st.session_state.current_request = None
         st.experimental_rerun()
+
+def process_ai_response(prompt, chat_history):
+    """处理AI响应的函数"""
+    # 创建占位符
+    reasoning_placeholder = st.empty()
+    response_placeholder = st.empty()
+    
+    # 用于累积内容
+    full_reasoning = ""
+    full_response = ""
+    has_error = False
+    
+    # 显示初始状态
+    with reasoning_placeholder.expander("正在思考...", expanded=True):
+        reasoning_container = st.empty()
+    
+    response_container = response_placeholder.empty()
+    
+    # 处理流式响应
+    for chunk in st.session_state.ai_model.generate_response_stream(
+        prompt, 
+        chat_history
+    ):
+        if chunk["type"] == "reasoning":
+            full_reasoning += chunk["content"]
+            with reasoning_placeholder.expander("思考过程", expanded=True):
+                reasoning_container.markdown(f"### 🤔 思考过程\n{full_reasoning}")
+        
+        elif chunk["type"] == "response":
+            full_response += chunk["content"]
+            response_container.markdown(f"### 💡 回答\n{full_response}")
+        
+        elif chunk["type"] == "complete":
+            # 更新为最终状态
+            with reasoning_placeholder.expander("查看思考过程", expanded=False):
+                reasoning_container.markdown(f"### 🤔 思考过程\n{chunk['content']['reasoning']}")
+            response_container.markdown(f"### 💡 回答\n{chunk['content']['response']}")
+            
+            # 添加到历史记录
+            st.session_state.chat_history.append({
+                "role": "assistant",
+                "content": chunk["content"]
+            })
+            # 清除当前请求
+            st.session_state.current_request = None
+            
+        elif chunk["type"] == "error":
+            # 显示错误信息
+            has_error = True
+            with reasoning_placeholder.expander("思考过程出错", expanded=True):
+                reasoning_container.error(chunk["content"]["reasoning"])
+            response_container.error(chunk["content"]["response"])
+            
+            # 添加重试按钮
+            col1, col2 = response_container.columns([3, 1])
+            with col2:
+                if st.button("🔄 重试", key="retry_button"):
+                    # 保存当前请求信息以供重试
+                    st.session_state.current_request = {
+                        "prompt": prompt,
+                        "chat_history": chat_history
+                    }
+                    st.experimental_rerun()
+
+    return has_error
 
 # 显示聊天历史
 for message in st.session_state.chat_history:
@@ -89,6 +158,14 @@ for message in st.session_state.chat_history:
         else:
             st.write(message["content"])
 
+# 检查是否有待重试的请求
+if st.session_state.current_request:
+    with st.chat_message("assistant"):
+        process_ai_response(
+            st.session_state.current_request["prompt"],
+            st.session_state.current_request["chat_history"]
+        )
+
 # 用户输入
 if prompt := st.chat_input("请输入您的问题..."):
     # 检查是否有API Key
@@ -104,48 +181,4 @@ if prompt := st.chat_input("请输入您的问题..."):
         
         # 显示AI思考过程
         with st.chat_message("assistant"):
-            # 创建占位符
-            reasoning_placeholder = st.empty()
-            response_placeholder = st.empty()
-            
-            # 用于累积内容
-            full_reasoning = ""
-            full_response = ""
-            
-            # 显示初始状态
-            with reasoning_placeholder.expander("正在思考...", expanded=True):
-                reasoning_container = st.empty()
-            
-            response_container = response_placeholder.empty()
-            
-            # 处理流式响应
-            for chunk in st.session_state.ai_model.generate_response_stream(
-                prompt, 
-                st.session_state.chat_history[:-1]
-            ):
-                if chunk["type"] == "reasoning":
-                    full_reasoning += chunk["content"]
-                    with reasoning_placeholder.expander("思考过程", expanded=True):
-                        reasoning_container.markdown(f"### 🤔 思考过程\n{full_reasoning}")
-                
-                elif chunk["type"] == "response":
-                    full_response += chunk["content"]
-                    response_container.markdown(f"### 💡 回答\n{full_response}")
-                
-                elif chunk["type"] == "complete":
-                    # 更新为最终状态
-                    with reasoning_placeholder.expander("查看思考过程", expanded=False):
-                        reasoning_container.markdown(f"### 🤔 思考过程\n{chunk['content']['reasoning']}")
-                    response_container.markdown(f"### 💡 回答\n{chunk['content']['response']}")
-                    
-                    # 添加到历史记录
-                    st.session_state.chat_history.append({
-                        "role": "assistant",
-                        "content": chunk["content"]
-                    })
-                
-                elif chunk["type"] == "error":
-                    # 显示错误信息
-                    with reasoning_placeholder.expander("思考过程出错", expanded=True):
-                        reasoning_container.error(chunk["content"]["reasoning"])
-                    response_container.error(chunk["content"]["response"]) 
+            process_ai_response(prompt, st.session_state.chat_history[:-1]) 
