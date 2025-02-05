@@ -59,6 +59,24 @@ class AIModel:
                              self.retry_delay, attempt + 1, self.max_retries, str(e))
                 time.sleep(self.retry_delay)
 
+    def _format_message_for_api(self, message):
+        """格式化消息以适应API要求"""
+        if isinstance(message["content"], dict):
+            # 如果是助手的回复，合并思考过程和回答
+            content = message["content"]
+            formatted_content = ""
+            if content.get("reasoning"):
+                formatted_content += f"思考过程：\n{content['reasoning']}\n\n"
+            if content.get("response"):
+                formatted_content += f"回答：\n{content['response']}"
+            return {
+                "role": message["role"],
+                "content": formatted_content.strip()
+            }
+        else:
+            # 用户消息直接返回
+            return message
+
     def generate_response(self, user_input, chat_history=None):
         if chat_history is None:
             chat_history = []
@@ -271,24 +289,19 @@ class AIModel:
             }
 
     def _build_messages(self, chat_history, user_input):
+        """构建完整的消息历史"""
         messages = [{"role": "system", "content": self.system_prompt}]
         
         # 添加历史对话
         for msg in chat_history:
-            if isinstance(msg["content"], dict):
-                # 如果是字典格式，只使用response部分
-                messages.append({
-                    "role": msg["role"],
-                    "content": msg["content"]["response"]
-                })
-            else:
-                messages.append({
-                    "role": msg["role"],
-                    "content": msg["content"]
-                })
+            formatted_msg = self._format_message_for_api(msg)
+            messages.append(formatted_msg)
         
         # 添加当前用户输入
         messages.append({"role": "user", "content": user_input})
+        
+        # 记录完整的消息历史用于调试
+        logger.debug("完整的消息历史: %s", json.dumps(messages, ensure_ascii=False))
         
         return messages
 
