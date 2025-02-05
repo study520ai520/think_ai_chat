@@ -139,14 +139,29 @@ class AIModel:
                 try:
                     # 移除 "data: " 前缀并解析JSON
                     line = line.decode('utf-8')
+                    # 打印原始数据
+                    logger.debug("原始数据行: %r", line)
+                    
                     if line.startswith("data: "):
                         line = line[6:]
+                        logger.debug("处理后的数据: %r", line)
                     if line == "[DONE]":
                         logger.info("数据流接收完成")
                         break
+                    
+                    # 尝试解析前先检查数据是否为空
+                    if not line.strip():
+                        logger.warning("收到空数据行")
+                        continue
                         
-                    chunk = json.loads(line)
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError as e:
+                        logger.error("JSON解析错误: %s, 原始数据: %r", str(e), line)
+                        continue
+                        
                     if "choices" not in chunk:
+                        logger.warning("数据块中没有choices字段: %r", chunk)
                         continue
                         
                     delta = chunk["choices"][0].get("delta", {})
@@ -174,11 +189,8 @@ class AIModel:
                             "content": content_chunk
                         }
                         
-                except json.JSONDecodeError as e:
-                    logger.warning("JSON解析错误: %s", str(e))
-                    continue
                 except Exception as e:
-                    logger.error("处理数据块时出错: %s", str(e), exc_info=True)
+                    logger.error("处理数据块时出错: %s, 原始数据: %r", str(e), line, exc_info=True)
                     continue
             
             # 返回完整的响应
