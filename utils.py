@@ -111,8 +111,8 @@ class AIModel:
                     delta = chunk["choices"][0].get("delta", {})
                     
                     # 检查是否有reasoning_content
-                    if "reasoning_content" in delta:
-                        reasoning_chunk = delta["reasoning_content"]
+                    reasoning_chunk = delta.get("reasoning_content", "")
+                    if reasoning_chunk:
                         reasoning_content += reasoning_chunk
                         yield {
                             "type": "reasoning",
@@ -120,8 +120,8 @@ class AIModel:
                         }
                     
                     # 检查是否有content
-                    if "content" in delta:
-                        content_chunk = delta["content"]
+                    content_chunk = delta.get("content", "")
+                    if content_chunk:
                         final_content += content_chunk
                         yield {
                             "type": "response",
@@ -129,19 +129,23 @@ class AIModel:
                         }
                         
                 except json.JSONDecodeError:
+                    print(f"JSON解析错误: {line}")
                     continue
                 except Exception as e:
-                    print(f"Error processing chunk: {str(e)}")
+                    print(f"处理数据块时出错: {str(e)}, 数据: {line}")
                     continue
             
             # 返回完整的响应
-            yield {
-                "type": "complete",
-                "content": {
-                    "reasoning": reasoning_content,
-                    "response": final_content
+            if reasoning_content or final_content:
+                yield {
+                    "type": "complete",
+                    "content": {
+                        "reasoning": reasoning_content or "未提供思考过程",
+                        "response": final_content or "生成回答时出现问题"
+                    }
                 }
-            }
+            else:
+                raise Exception("未能获取有效的响应内容")
             
         except Exception as e:
             error_msg = f"API调用出错：{str(e)}"
