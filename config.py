@@ -38,35 +38,40 @@ PARAMETER_RANGES = {
         "max": 1.0,
         "default": 0.7,
         "step": 0.1,
-        "description": "控制输出的随机性，值越大输出越随机"
+        "description": "控制输出的随机性，值越大输出越随机",
+        "type": "float"
     },
     "max_tokens": {
         "min": 100,
         "max": 4000,
         "default": 2000,
         "step": 100,
-        "description": "生成文本的最大长度"
+        "description": "生成文本的最大长度",
+        "type": "int"
     },
     "top_p": {
         "min": 0.0,
         "max": 1.0,
         "default": 0.95,
         "step": 0.05,
-        "description": "控制输出的多样性"
+        "description": "控制输出的多样性",
+        "type": "float"
     },
     "frequency_penalty": {
         "min": -2.0,
         "max": 2.0,
-        "default": 0,
+        "default": 0.0,
         "step": 0.1,
-        "description": "控制重复词汇的惩罚程度"
+        "description": "控制重复词汇的惩罚程度",
+        "type": "float"
     },
     "presence_penalty": {
         "min": -2.0,
         "max": 2.0,
-        "default": 0,
+        "default": 0.0,
         "step": 0.1,
-        "description": "控制新话题的倾向性"
+        "description": "控制新话题的倾向性",
+        "type": "float"
     }
 }
 

@@ -30,14 +30,24 @@ with st.sidebar:
     # 参数调整
     st.subheader("参数设置")
     for param, config in PARAMETER_RANGES.items():
-        value = st.slider(
-            f"{param} - {config['description']}",
-            min_value=config['min'],
-            max_value=config['max'],
-            value=config['default'],
-            step=config['step'],
-            help=config['description']
-        )
+        if config["type"] == "float":
+            value = st.slider(
+                f"{param} - {config['description']}",
+                min_value=float(config['min']),
+                max_value=float(config['max']),
+                value=float(config['default']),
+                step=float(config['step']),
+                help=config['description']
+            )
+        else:  # int类型
+            value = st.slider(
+                f"{param} - {config['description']}",
+                min_value=int(config['min']),
+                max_value=int(config['max']),
+                value=int(config['default']),
+                step=int(config['step']),
+                help=config['description']
+            )
         st.session_state.ai_model.config[param] = value
     
     # 添加分隔线
