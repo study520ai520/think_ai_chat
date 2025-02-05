@@ -1,4 +1,5 @@
 import requests
+import json
 from config import API_CONFIG, SYSTEM_PROMPT
 
 class AIModel:
@@ -90,10 +91,12 @@ class AIModel:
             # 用于累积思考过程和最终回答
             reasoning_content = ""
             final_content = ""
-            is_reasoning = True  # 标记当前是否在输出思考过程
             
             for line in response.iter_lines():
-                if line:
+                if not line:
+                    continue
+                    
+                try:
                     # 移除 "data: " 前缀并解析JSON
                     line = line.decode('utf-8')
                     if line.startswith("data: "):
@@ -101,32 +104,35 @@ class AIModel:
                     if line == "[DONE]":
                         break
                         
-                    try:
-                        chunk = response.json()
-                        delta = chunk["choices"][0]["delta"]
-                        
-                        # 检查是否有reasoning_content
-                        if "reasoning_content" in delta:
-                            is_reasoning = True
-                            reasoning_chunk = delta["reasoning_content"]
-                            reasoning_content += reasoning_chunk
-                            yield {
-                                "type": "reasoning",
-                                "content": reasoning_chunk
-                            }
-                        
-                        # 检查是否有content
-                        if "content" in delta:
-                            is_reasoning = False
-                            content_chunk = delta["content"]
-                            final_content += content_chunk
-                            yield {
-                                "type": "response",
-                                "content": content_chunk
-                            }
-                            
-                    except Exception as e:
+                    chunk = json.loads(line)
+                    if "choices" not in chunk:
                         continue
+                        
+                    delta = chunk["choices"][0].get("delta", {})
+                    
+                    # 检查是否有reasoning_content
+                    if "reasoning_content" in delta:
+                        reasoning_chunk = delta["reasoning_content"]
+                        reasoning_content += reasoning_chunk
+                        yield {
+                            "type": "reasoning",
+                            "content": reasoning_chunk
+                        }
+                    
+                    # 检查是否有content
+                    if "content" in delta:
+                        content_chunk = delta["content"]
+                        final_content += content_chunk
+                        yield {
+                            "type": "response",
+                            "content": content_chunk
+                        }
+                        
+                except json.JSONDecodeError:
+                    continue
+                except Exception as e:
+                    print(f"Error processing chunk: {str(e)}")
+                    continue
             
             # 返回完整的响应
             yield {
@@ -138,10 +144,12 @@ class AIModel:
             }
             
         except Exception as e:
+            error_msg = f"API调用出错：{str(e)}"
+            print(error_msg)  # 打印错误信息以便调试
             yield {
                 "type": "error",
                 "content": {
-                    "reasoning": f"思考过程出错：{str(e)}",
+                    "reasoning": error_msg,
                     "response": f"抱歉，发生了错误：{str(e)}"
                 }
             }
