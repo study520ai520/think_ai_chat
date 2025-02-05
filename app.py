@@ -1,6 +1,6 @@
 import streamlit as st
 from utils import AIModel, format_chat_history
-from config import PAGE_CONFIG
+from config import PAGE_CONFIG, MODEL_OPTIONS, PARAMETER_RANGES
 
 # 配置页面
 st.set_page_config(**PAGE_CONFIG)
@@ -18,10 +18,33 @@ st.title("🤖 AI思考推理助手")
 # 侧边栏配置
 with st.sidebar:
     st.header("模型配置")
-    temperature = st.slider("Temperature", 0.0, 1.0, 0.7, 0.1)
-    st.session_state.ai_model.model.config.temperature = temperature
     
-    if st.button("清空对话历史"):
+    # 模型选择
+    selected_model_name = st.selectbox(
+        "选择模型",
+        list(MODEL_OPTIONS.keys()),
+        help="选择要使用的AI模型"
+    )
+    st.session_state.ai_model.config["model"] = MODEL_OPTIONS[selected_model_name]
+    
+    # 参数调整
+    st.subheader("参数设置")
+    for param, config in PARAMETER_RANGES.items():
+        value = st.slider(
+            f"{param} - {config['description']}",
+            min_value=config['min'],
+            max_value=config['max'],
+            value=config['default'],
+            step=config['step'],
+            help=config['description']
+        )
+        st.session_state.ai_model.config[param] = value
+    
+    # 添加分隔线
+    st.divider()
+    
+    # 清空对话按钮
+    if st.button("清空对话历史", type="secondary"):
         st.session_state.chat_history = []
         st.experimental_rerun()
 

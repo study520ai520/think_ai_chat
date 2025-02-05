@@ -16,12 +16,58 @@ PAGE_CONFIG = {
 API_CONFIG = {
     "api_key": os.getenv("DEEPSEEK_API_KEY"),
     "base_url": "https://api.deepseek.com/v1",
+    # 默认配置
     "model": "deepseek-chat",
     "temperature": 0.7,
     "max_tokens": 2000,
     "top_p": 0.95,
     "frequency_penalty": 0,
     "presence_penalty": 0
+}
+
+# 模型选项
+MODEL_OPTIONS = {
+    "DeepSeek Chat": "deepseek-chat",
+    "DeepSeek Reasoner": "deepseek-reasoner"
+}
+
+# 参数配置范围
+PARAMETER_RANGES = {
+    "temperature": {
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.7,
+        "step": 0.1,
+        "description": "控制输出的随机性，值越大输出越随机"
+    },
+    "max_tokens": {
+        "min": 100,
+        "max": 4000,
+        "default": 2000,
+        "step": 100,
+        "description": "生成文本的最大长度"
+    },
+    "top_p": {
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.95,
+        "step": 0.05,
+        "description": "控制输出的多样性"
+    },
+    "frequency_penalty": {
+        "min": -2.0,
+        "max": 2.0,
+        "default": 0,
+        "step": 0.1,
+        "description": "控制重复词汇的惩罚程度"
+    },
+    "presence_penalty": {
+        "min": -2.0,
+        "max": 2.0,
+        "default": 0,
+        "step": 0.1,
+        "description": "控制新话题的倾向性"
+    }
 }
 
 # 系统提示词
