@@ -14,7 +14,7 @@ PAGE_CONFIG = {
 
 # DeepSeek API配置
 API_CONFIG = {
-    "api_key": os.getenv("DEEPSEEK_API_KEY"),
+    "api_key": None,  # 初始化为None，后续根据用户输入或环境变量设置
     "base_url": "https://api.deepseek.com/v1",
     # 默认配置
     "model": "deepseek-chat",
@@ -24,6 +24,9 @@ API_CONFIG = {
     "frequency_penalty": 0,
     "presence_penalty": 0
 }
+
+# 从环境变量获取默认API Key
+DEFAULT_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 
 # 模型选项
 MODEL_OPTIONS = {

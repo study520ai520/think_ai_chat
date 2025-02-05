@@ -1,13 +1,19 @@
 import requests
 import json
-from config import API_CONFIG, SYSTEM_PROMPT
+from config import API_CONFIG, SYSTEM_PROMPT, DEFAULT_API_KEY
 
 class AIModel:
     def __init__(self):
-        self.api_key = API_CONFIG["api_key"]
+        self.api_key = DEFAULT_API_KEY
         self.base_url = API_CONFIG["base_url"]
-        self.config = API_CONFIG
+        self.config = API_CONFIG.copy()
+        self.config["api_key"] = self.api_key
         self.system_prompt = SYSTEM_PROMPT
+
+    def update_api_key(self, new_api_key):
+        """更新API Key"""
+        self.api_key = new_api_key
+        self.config["api_key"] = new_api_key
 
     def generate_response(self, user_input, chat_history=None):
         if chat_history is None:
@@ -58,6 +64,17 @@ class AIModel:
     def generate_response_stream(self, user_input, chat_history=None):
         if chat_history is None:
             chat_history = []
+        
+        # 检查API Key
+        if not self.api_key:
+            yield {
+                "type": "error",
+                "content": {
+                    "reasoning": "API Key未设置",
+                    "response": "请先设置API Key"
+                }
+            }
+            return
         
         # 构建消息历史
         messages = self._build_messages(chat_history, user_input)
