@@ -59,17 +59,29 @@ with st.sidebar:
     
     # 模型选择
     with st.expander("模型选择", expanded=True):
-        # 预设模型
-        st.subheader("预设模型")
-        selected_preset = st.selectbox(
-            "选择预设模型",
-            list(PRESET_MODELS.keys()),
-            format_func=lambda x: f"📦 {x}",
-            help="选择要使用的预设模型"
+        # 合并预设模型和自定义模型
+        all_models = {
+            **{f"📦 {k}": v for k, v in PRESET_MODELS.items()},  # 预设模型添加📦图标
+            **{f"📝 {k}": v for k, v in st.session_state.custom_models.items()}  # 自定义模型添加📝图标
+        }
+        
+        # 模型选择
+        selected_model_name = st.selectbox(
+            "选择模型",
+            options=list(all_models.keys()),
+            help="选择要使用的模型（📦预设模型 / 📝自定义模型）"
         )
         
-        # 自定义模型
-        st.subheader("自定义模型")
+        # 更新选中的模型
+        selected_model_id = all_models[selected_model_name]
+        if selected_model_id != st.session_state.api_config["model"]:
+            st.session_state.api_config["model"] = selected_model_id
+            st.session_state.ai_model.update_config(st.session_state.api_config)
+        
+        st.divider()
+        
+        # 自定义模型管理
+        st.subheader("添加自定义模型")
         custom_model_name = st.text_input("模型名称", key="new_model_name")
         custom_model_id = st.text_input("模型ID", key="new_model_id")
         
@@ -79,6 +91,7 @@ with st.sidebar:
                 if custom_model_name and custom_model_id:
                     st.session_state.custom_models[custom_model_name] = custom_model_id
                     st.success(f"已添加模型: {custom_model_name}")
+                    st.experimental_rerun()  # 重新运行以更新选择列表
                 else:
                     st.warning("请填写模型名称和ID")
         
@@ -86,6 +99,11 @@ with st.sidebar:
             if st.button("🗑️ 清除全部", help="清除所有自定义模型"):
                 st.session_state.custom_models = {}
                 st.success("已清除所有自定义模型")
+                # 如果当前选中的是自定义模型，切换回默认模型
+                if "📝" in selected_model_name:
+                    st.session_state.api_config["model"] = list(PRESET_MODELS.values())[0]
+                    st.session_state.ai_model.update_config(st.session_state.api_config)
+                st.experimental_rerun()
         
         # 显示现有的自定义模型
         if st.session_state.custom_models:
@@ -95,18 +113,14 @@ with st.sidebar:
                 with col1:
                     st.text(f"📝 {name}: {model_id}")
                 with col2:
-                    if st.button("删除", key=f"del_{name}", help=f"删除模型 {name}"):
+                    if st.button("🗑️", key=f"del_{name}", help=f"删除模型 {name}"):
                         del st.session_state.custom_models[name]
+                        # 如果删除的是当前选中的模型，切换回默认模型
+                        if f"📝 {name}" == selected_model_name:
+                            st.session_state.api_config["model"] = list(PRESET_MODELS.values())[0]
+                            st.session_state.ai_model.update_config(st.session_state.api_config)
                         st.success(f"已删除模型: {name}")
                         st.experimental_rerun()
-        
-        # 合并所有模型选项
-        all_models = {**PRESET_MODELS, **st.session_state.custom_models}
-        selected_model = all_models[selected_preset]
-        
-        if selected_model != st.session_state.api_config["model"]:
-            st.session_state.api_config["model"] = selected_model
-            st.session_state.ai_model.update_config(st.session_state.api_config)
     
     # 高级设置
     with st.expander("高级设置"):
