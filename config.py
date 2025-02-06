@@ -1,8 +1,6 @@
-import os
-from dotenv import load_dotenv
-
-# 加载环境变量
-load_dotenv()
+"""
+配置文件
+"""
 
 # 页面配置
 PAGE_CONFIG = {
@@ -12,70 +10,17 @@ PAGE_CONFIG = {
     "initial_sidebar_state": "expanded"
 }
 
-# DeepSeek API配置
-API_CONFIG = {
-    "api_key": None,  # 初始化为None，后续根据用户输入或环境变量设置
+# 默认API配置
+DEFAULT_API_CONFIG = {
     "base_url": "https://api.deepseek.com/v1",
-    # 默认配置
-    "model": "deepseek-chat",
-    "temperature": 0.7,
     "max_tokens": 8192,
-    "top_p": 0.95,
-    "frequency_penalty": 0,
-    "presence_penalty": 0
 }
 
-# 从环境变量获取默认API Key
-DEFAULT_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-
-# 模型选项
-MODEL_OPTIONS = {
+# 预设模型列表
+PRESET_MODELS = {
     "DeepSeek Chat": "deepseek-chat",
-    "DeepSeek Reasoner": "deepseek-reasoner"
-}
-
-# 参数配置范围
-PARAMETER_RANGES = {
-    "temperature": {
-        "min": 0.0,
-        "max": 1.0,
-        "default": 0.7,
-        "step": 0.1,
-        "description": "控制输出的随机性，值越大输出越随机",
-        "type": "float"
-    },
-    "max_tokens": {
-        "min": 100,
-        "max": 4000,
-        "default": 2000,
-        "step": 100,
-        "description": "生成文本的最大长度",
-        "type": "int"
-    },
-    "top_p": {
-        "min": 0.0,
-        "max": 1.0,
-        "default": 0.95,
-        "step": 0.05,
-        "description": "控制输出的多样性",
-        "type": "float"
-    },
-    "frequency_penalty": {
-        "min": -2.0,
-        "max": 2.0,
-        "default": 0.0,
-        "step": 0.1,
-        "description": "控制重复词汇的惩罚程度",
-        "type": "float"
-    },
-    "presence_penalty": {
-        "min": -2.0,
-        "max": 2.0,
-        "default": 0.0,
-        "step": 0.1,
-        "description": "控制新话题的倾向性",
-        "type": "float"
-    }
+    "DeepSeek Reasoner": "deepseek-reasoner",
+    "DeepSeek Code": "deepseek-coder",
 }
 
 # 系统提示词

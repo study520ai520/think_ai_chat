@@ -2,7 +2,7 @@ import requests
 import json
 import logging
 import time
-from config import API_CONFIG, SYSTEM_PROMPT, DEFAULT_API_KEY
+from config import SYSTEM_PROMPT
 
 # 配置日志
 logging.basicConfig(
@@ -24,21 +24,26 @@ class APIError(Exception):
     pass
 
 class AIModel:
-    def __init__(self):
-        self.api_key = DEFAULT_API_KEY
-        self.base_url = API_CONFIG["base_url"]
-        self.config = API_CONFIG.copy()
-        self.config["api_key"] = self.api_key
+    def __init__(self, config):
+        """初始化AI模型
+        
+        Args:
+            config (dict): 模型配置，包含api_key、base_url、model等
+        """
+        self.config = config.copy()
         self.system_prompt = SYSTEM_PROMPT
         self.max_retries = 3  # 最大重试次数
         self.retry_delay = 2  # 重试间隔（秒）
-        logger.info("初始化AI模型，使用API地址: %s", self.base_url)
+        logger.info("初始化AI模型，使用API地址: %s", self.config.get("base_url"))
 
-    def update_api_key(self, new_api_key):
-        """更新API Key"""
-        self.api_key = new_api_key
-        self.config["api_key"] = new_api_key
-        logger.info("API Key已更新")
+    def update_config(self, new_config):
+        """更新模型配置
+        
+        Args:
+            new_config (dict): 新的配置信息
+        """
+        self.config.update(new_config)
+        logger.info("模型配置已更新")
 
     def _make_api_request(self, url, headers, data, stream=False):
         """发送API请求，带重试机制"""
@@ -77,58 +82,12 @@ class AIModel:
             # 用户消息直接返回
             return message
 
-    def generate_response(self, user_input, chat_history=None):
-        if chat_history is None:
-            chat_history = []
-        
-        # 构建消息历史
-        messages = self._build_messages(chat_history, user_input)
-        
-        # 调用API
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        data = {
-            "model": self.config["model"],
-            "messages": messages,
-            "temperature": self.config["temperature"],
-            "max_tokens": self.config["max_tokens"],
-            "top_p": self.config["top_p"],
-            "frequency_penalty": self.config["frequency_penalty"],
-            "presence_penalty": self.config["presence_penalty"]
-        }
-        
-        try:
-            response = requests.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=data
-            )
-            response.raise_for_status()
-            response_data = response.json()
-            
-            # 获取思考过程和最终回答
-            reasoning_content = response_data["choices"][0]["message"].get("reasoning_content", "")
-            final_content = response_data["choices"][0]["message"]["content"]
-            
-            return {
-                "reasoning": reasoning_content,
-                "response": final_content
-            }
-        except Exception as e:
-            return {
-                "reasoning": f"思考过程出错：{str(e)}",
-                "response": f"抱歉，发生了错误：{str(e)}"
-            }
-
     def generate_response_stream(self, user_input, chat_history=None):
         if chat_history is None:
             chat_history = []
         
-        # 检查API Key
-        if not self.api_key:
+        # 检查API配置
+        if not self.config.get("api_key"):
             logger.error("未设置API Key")
             yield {
                 "type": "error",
@@ -145,25 +104,21 @@ class AIModel:
         
         # 调用API
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {self.config['api_key']}",
             "Content-Type": "application/json"
         }
         
         data = {
             "model": self.config["model"],
             "messages": messages,
-            "temperature": self.config["temperature"],
-            "max_tokens": self.config["max_tokens"],
-            "top_p": self.config["top_p"],
-            "frequency_penalty": self.config["frequency_penalty"],
-            "presence_penalty": self.config["presence_penalty"],
+            "max_tokens": self.config.get("max_tokens", 8192),
             "stream": True  # 启用流式输出
         }
         
         try:
             logger.info("正在调用API生成回答...")
             response = self._make_api_request(
-                f"{self.base_url}/chat/completions",
+                f"{self.config['base_url']}/chat/completions",
                 headers=headers,
                 data=data,
                 stream=True

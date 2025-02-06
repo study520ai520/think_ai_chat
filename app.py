@@ -1,6 +1,6 @@
 import streamlit as st
 from utils import AIModel, format_chat_history
-from config import PAGE_CONFIG, MODEL_OPTIONS, PARAMETER_RANGES, DEFAULT_API_KEY
+from config import PAGE_CONFIG, PRESET_MODELS, DEFAULT_API_CONFIG
 
 # 配置页面
 st.set_page_config(**PAGE_CONFIG)
@@ -9,11 +9,18 @@ st.set_page_config(**PAGE_CONFIG)
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-if "api_key" not in st.session_state:
-    st.session_state.api_key = DEFAULT_API_KEY
+if "api_config" not in st.session_state:
+    st.session_state.api_config = DEFAULT_API_CONFIG.copy()
+    st.session_state.api_config.update({
+        "api_key": "",
+        "model": list(PRESET_MODELS.values())[0]  # 默认使用第一个模型
+    })
+
+if "custom_models" not in st.session_state:
+    st.session_state.custom_models = {}
 
 if "ai_model" not in st.session_state:
-    st.session_state.ai_model = AIModel()
+    st.session_state.ai_model = AIModel(st.session_state.api_config)
 
 if "current_request" not in st.session_state:
     st.session_state.current_request = None
@@ -23,63 +30,114 @@ st.title("🤖 AI思考推理助手")
 
 # 侧边栏配置
 with st.sidebar:
-    st.header("模型配置")
+    st.header("🛠️ 模型配置")
     
-    # API Key输入
-    api_key = st.text_input(
-        "API Key",
-        value=st.session_state.api_key,
-        type="password",
-        help="输入您的DeepSeek API Key，如果不填写则使用环境变量中的默认值"
-    )
-    
-    # 如果API Key发生变化，更新模型配置
-    if api_key != st.session_state.api_key:
-        st.session_state.api_key = api_key
-        st.session_state.ai_model.update_api_key(api_key if api_key else DEFAULT_API_KEY)
+    # API设置
+    with st.expander("API设置", expanded=True):
+        # API Base URL
+        base_url = st.text_input(
+            "API Base URL",
+            value=st.session_state.api_config["base_url"],
+            help="设置API基础地址"
+        )
+        
+        # API Key
+        api_key = st.text_input(
+            "API Key",
+            value=st.session_state.api_config["api_key"],
+            type="password",
+            help="输入您的API密钥"
+        )
+        
+        if base_url != st.session_state.api_config["base_url"] or \
+           api_key != st.session_state.api_config["api_key"]:
+            st.session_state.api_config.update({
+                "base_url": base_url,
+                "api_key": api_key
+            })
+            st.session_state.ai_model.update_config(st.session_state.api_config)
     
     # 模型选择
-    selected_model_name = st.selectbox(
-        "选择模型",
-        list(MODEL_OPTIONS.keys()),
-        help="选择要使用的AI模型"
-    )
-    st.session_state.ai_model.config["model"] = MODEL_OPTIONS[selected_model_name]
+    with st.expander("模型选择", expanded=True):
+        # 预设模型
+        st.subheader("预设模型")
+        selected_preset = st.selectbox(
+            "选择预设模型",
+            list(PRESET_MODELS.keys()),
+            format_func=lambda x: f"📦 {x}",
+            help="选择要使用的预设模型"
+        )
+        
+        # 自定义模型
+        st.subheader("自定义模型")
+        custom_model_name = st.text_input("模型名称", key="new_model_name")
+        custom_model_id = st.text_input("模型ID", key="new_model_id")
+        
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("➕ 添加模型", help="添加自定义模型"):
+                if custom_model_name and custom_model_id:
+                    st.session_state.custom_models[custom_model_name] = custom_model_id
+                    st.success(f"已添加模型: {custom_model_name}")
+                else:
+                    st.warning("请填写模型名称和ID")
+        
+        with col2:
+            if st.button("🗑️ 清除全部", help="清除所有自定义模型"):
+                st.session_state.custom_models = {}
+                st.success("已清除所有自定义模型")
+        
+        # 显示现有的自定义模型
+        if st.session_state.custom_models:
+            st.subheader("已添加的自定义模型")
+            for name, model_id in st.session_state.custom_models.items():
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.text(f"📝 {name}: {model_id}")
+                with col2:
+                    if st.button("删除", key=f"del_{name}", help=f"删除模型 {name}"):
+                        del st.session_state.custom_models[name]
+                        st.success(f"已删除模型: {name}")
+                        st.experimental_rerun()
+        
+        # 合并所有模型选项
+        all_models = {**PRESET_MODELS, **st.session_state.custom_models}
+        selected_model = all_models[selected_preset]
+        
+        if selected_model != st.session_state.api_config["model"]:
+            st.session_state.api_config["model"] = selected_model
+            st.session_state.ai_model.update_config(st.session_state.api_config)
     
-    # 参数调整
-    st.subheader("参数设置")
-    for param, config in PARAMETER_RANGES.items():
-        if config["type"] == "float":
-            value = st.slider(
-                f"{param} - {config['description']}",
-                min_value=float(config['min']),
-                max_value=float(config['max']),
-                value=float(config['default']),
-                step=float(config['step']),
-                help=config['description']
-            )
-        else:  # int类型
-            value = st.slider(
-                f"{param} - {config['description']}",
-                min_value=int(config['min']),
-                max_value=int(config['max']),
-                value=int(config['default']),
-                step=int(config['step']),
-                help=config['description']
-            )
-        st.session_state.ai_model.config[param] = value
+    # 高级设置
+    with st.expander("高级设置"):
+        max_tokens = st.number_input(
+            "最大生成长度",
+            min_value=1,
+            max_value=130000,
+            value=st.session_state.api_config.get("max_tokens", 8192),
+            help="设置生成文本的最大长度"
+        )
+        
+        if max_tokens != st.session_state.api_config.get("max_tokens"):
+            st.session_state.api_config["max_tokens"] = max_tokens
+            st.session_state.ai_model.update_config(st.session_state.api_config)
     
     # 添加分隔线
     st.divider()
     
     # 清空对话按钮
-    if st.button("清空对话历史", type="secondary"):
+    if st.button("🗑️ 清空对话历史", type="secondary", help="清除所有对话记录"):
         st.session_state.chat_history = []
         st.session_state.current_request = None
         st.experimental_rerun()
 
 def process_ai_response(prompt, chat_history):
     """处理AI响应的函数"""
+    # 检查API配置
+    if not st.session_state.api_config.get("api_key"):
+        st.error("⚠️ 请先在侧边栏设置API Key")
+        return
+    
     # 创建占位符
     reasoning_placeholder = st.empty()
     response_placeholder = st.empty()
@@ -168,17 +226,13 @@ if st.session_state.current_request:
 
 # 用户输入
 if prompt := st.chat_input("请输入您的问题..."):
-    # 检查是否有API Key
-    if not st.session_state.api_key:
-        st.error("请先在侧边栏设置API Key或在环境变量中配置DEEPSEEK_API_KEY")
-    else:
-        # 添加用户消息到历史
-        st.session_state.chat_history.append({"role": "user", "content": prompt})
-        
-        # 显示用户消息
-        with st.chat_message("user"):
-            st.write(prompt)
-        
-        # 显示AI思考过程
-        with st.chat_message("assistant"):
-            process_ai_response(prompt, st.session_state.chat_history[:-1]) 
+    # 添加用户消息到历史
+    st.session_state.chat_history.append({"role": "user", "content": prompt})
+    
+    # 显示用户消息
+    with st.chat_message("user"):
+        st.write(prompt)
+    
+    # 显示AI思考过程
+    with st.chat_message("assistant"):
+        process_ai_response(prompt, st.session_state.chat_history[:-1]) 
