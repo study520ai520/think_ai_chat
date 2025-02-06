@@ -2,6 +2,7 @@ import requests
 import json
 import logging
 import time
+import re
 from config import SYSTEM_PROMPT
 
 # 配置日志
@@ -18,6 +19,20 @@ logger = logging.getLogger(__name__)
 # 设置第三方库的日志级别
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+def extract_think_content(text):
+    """提取<think>标签中的内容"""
+    think_pattern = re.compile(r'<think>(.*?)</think>', re.DOTALL)
+    matches = think_pattern.findall(text)
+    
+    if matches:
+        # 提取思考内容
+        thinking = '\n'.join(matches)
+        # 移除原文中的think标签及其内容
+        response = think_pattern.sub('', text).strip()
+        return thinking, response
+    
+    return None, text
 
 class APIError(Exception):
     """API调用相关错误"""
@@ -185,37 +200,45 @@ class AIModel:
                     if chunk_count % 100 == 0:
                         logger.info("已处理 %d 个数据块", chunk_count)
                     
-                    # 检查是否有reasoning_content
-                    reasoning_chunk = delta.get("reasoning_content", "")
-                    if reasoning_chunk:
-                        reasoning_content += reasoning_chunk
-                        yield {
-                            "type": "reasoning",
-                            "content": reasoning_chunk
-                        }
-                    
                     # 检查是否有content
                     content_chunk = delta.get("content", "")
                     if content_chunk:
                         final_content += content_chunk
-                        yield {
-                            "type": "response",
-                            "content": content_chunk
-                        }
+                        # 检查是否包含<think>标签
+                        thinking, response = extract_think_content(final_content)
+                        if thinking:
+                            # 更新思考内容
+                            yield {
+                                "type": "reasoning",
+                                "content": thinking
+                            }
+                            # 更新回答内容
+                            yield {
+                                "type": "response",
+                                "content": response
+                            }
+                        else:
+                            # 没有<think>标签，直接作为回答内容
+                            yield {
+                                "type": "response",
+                                "content": content_chunk
+                            }
                         
                 except Exception as e:
                     logger.error("处理数据块时出错: %s, 原始数据: %r", str(e), line, exc_info=True)
                     continue
             
             # 返回完整的响应
-            if reasoning_content or final_content:
+            if final_content:
+                # 最后再次检查是否有<think>标签
+                thinking, response = extract_think_content(final_content)
                 logger.info("生成完成，思考过程长度: %d, 回答长度: %d", 
-                          len(reasoning_content), len(final_content))
+                          len(thinking) if thinking else 0, len(response))
                 yield {
                     "type": "complete",
                     "content": {
-                        "reasoning": reasoning_content or "未提供思考过程",
-                        "response": final_content or "生成回答时出现问题"
+                        "reasoning": thinking if thinking else "未提供思考过程",
+                        "response": response
                     }
                 }
             else:
